@@ -7,7 +7,6 @@ A Go application that performs traceroutes to DatHost gaming servers worldwide a
 - **Concurrent Execution**: Runs traceroutes to all 34 DatHost gaming server locations simultaneously for maximum speed
 - **Smart Timeouts**: 2-minute timeout per traceroute to prevent hanging on unresponsive routes
 - **Public IP Detection**: Uses ipify.org API to get your public IP address for accurate network diagnostics
-- Automatically detects and includes the local machine's IP address
 - **GUI file dialog** - Native file save dialog for easy file selection
 - **Results Summary**: Clear overview of successful, timed-out, and failed traceroutes
 - **User-Friendly Interface**: Window stays open for review, closes only when user is ready
@@ -216,7 +215,7 @@ This creates:
 
 Output structure:
 ```
-dist/
+build/
 ├── connectionchecker-dev-darwin-amd64.tar.gz
 ├── connectionchecker-dev-darwin-arm64.tar.gz
 ├── connectionchecker-dev-linux-amd64.tar.gz
