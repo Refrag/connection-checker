@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -102,7 +103,23 @@ func main() {
 		localIP = "Unknown"
 	}
 
-	file.WriteString(fmt.Sprintf("Public IP Address: %s\n\n", localIP))
+	// Get connection type
+	connectionType, err := getNetworkConnectionType()
+	if err != nil {
+		log.Printf("Warning: Could not determine connection type: %v", err)
+		connectionType = "Unknown"
+	}
+
+	// Get location information
+	location, err := getLocationInfo()
+	if err != nil {
+		log.Printf("Warning: Could not determine location: %v", err)
+		location = "Unknown"
+	}
+
+	file.WriteString(fmt.Sprintf("Public IP Address: %s\n", localIP))
+	file.WriteString(fmt.Sprintf("Connection Type: %s\n", connectionType))
+	file.WriteString(fmt.Sprintf("Location: %s\n\n", location))
 	file.WriteString("NOTE: This report contains network diagnostic information for Refrag support.\n")
 	file.WriteString("Please send this file to Refrag support as requested.\n\n")
 	file.WriteString("TIMEOUT SETTING: Each traceroute has a 2-minute timeout limit.\n\n")
@@ -382,4 +399,92 @@ func getLocalNetworkIP() (string, error) {
 	}
 
 	return "", fmt.Errorf("no active network interface found")
+}
+
+// getNetworkConnectionType returns whether the user is on WiFi or Ethernet
+func getNetworkConnectionType() (string, error) {
+	// For macOS
+	if _, err := exec.LookPath("networksetup"); err == nil {
+		cmd := exec.Command("networksetup", "-listallhardwareports")
+		output, err := cmd.Output()
+		if err != nil {
+			return "Unknown", err
+		}
+
+		// Check if WiFi is active
+		if strings.Contains(string(output), "Wi-Fi") || strings.Contains(string(output), "AirPort") {
+			return "WiFi", nil
+		}
+		return "Ethernet", nil
+	}
+
+	// For Linux
+	if _, err := exec.LookPath("nmcli"); err == nil {
+		cmd := exec.Command("nmcli", "-t", "-f", "TYPE", "device", "show")
+		output, err := cmd.Output()
+		if err != nil {
+			return "Unknown", err
+		}
+
+		if strings.Contains(string(output), "wifi") {
+			return "WiFi", nil
+		}
+		return "Ethernet", nil
+	}
+
+	// For Windows
+	if _, err := exec.LookPath("netsh"); err == nil {
+		cmd := exec.Command("netsh", "wlan", "show", "interfaces")
+		output, err := cmd.Output()
+		if err != nil {
+			return "Unknown", err
+		}
+
+		if strings.Contains(string(output), "State") {
+			return "WiFi", nil
+		}
+		return "Ethernet", nil
+	}
+
+	return "Unknown", fmt.Errorf("could not determine connection type")
+}
+
+// getLocationInfo returns the location information using ipinfo.io API
+func getLocationInfo() (string, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Get public IP first
+	ip, err := getPublicIP()
+	if err != nil {
+		return "Unknown", err
+	}
+
+	// Use ipinfo.io to get location data
+	resp, err := client.Get(fmt.Sprintf("https://ipinfo.io/%s/json", ip))
+	if err != nil {
+		return "Unknown", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "Unknown", fmt.Errorf("ipinfo.io returned status %d", resp.StatusCode)
+	}
+
+	var result struct {
+		City    string `json:"city"`
+		Region  string `json:"region"`
+		Country string `json:"country"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "Unknown", err
+	}
+
+	location := fmt.Sprintf("%s, %s, %s", result.City, result.Region, result.Country)
+	if location == ", , " {
+		return "Unknown", nil
+	}
+	return location, nil
 }
